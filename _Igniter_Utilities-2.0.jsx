@@ -1,0 +1,288 @@
+﻿// Reference script to create palette with resource string elements
+// Adjusted by Trent Armstrong from scripts provided by CreativeDojo.net
+
+// >>> Render Queue Prep might need to be run twice for desired results. 
+// >>> Try to fix this in later releases.
+
+{
+   function myScript(thisObj) {
+      function myScript_buildUI(thisObj) {
+                var myPanel = (thisObj instanceof Panel) ? thisObj : new Window("palette", "Panel Name", [0, 0, 300, 50]);
+
+                res = "group{orientation:'column', alignment:['fill', 'fill'], alignChildren:['fill', 'fill'],\
+                        myGroup: Group{orientation:'column', alignment:['fill', 'fill'], alignChildren:['fill', 'fill'],\
+                                myPanel: Panel{text:'IGNITER MEDIA UTILITIES 2.0', orientation:'row', alignChildren:['left', 'fill'],\
+                                    projectButton: Button{preferredSize: [90, 30], text:'Prep Project'},\
+                                    compButton: Button{preferredSize: [90, 30], text:'Prep Comps'},\
+                                    renderQueueButton: Button{preferredSize: [90, 30], text:'Render Prep'},\
+                                    foldersButton: Button{preferredSize: [60, 30], text:'+Folders'},\
+                                },\
+                        },\
+                }"
+
+                // Adds resource string to panel
+                myPanel.grp = myPanel.add(res);
+
+                 
+                // Assign function to UI elements
+                myPanel.grp.myGroup.myPanel.projectButton.onClick = function(){
+                  app.beginUndoGroup("Comp Labels");
+                  var theProject = app.project;
+                  var theItems = app.project.items;
+                  var numItems = app.project.numItems;
+                  var str = " ";
+                  var R = " ";
+                  
+
+                  var isFolder = 0;
+
+                          for(var i = 1; i <= numItems; i++)
+                      {
+                            theProject.item(i).label = 1;
+                            str = theProject.item(i).name;
+                            var hd = str.search("_HD");
+                            var sd = str.search("_SD");
+                            var uw = str.search("_UW");
+							var edit = str.search("HERE");
+                         
+                            
+                  //~ ------------------------------------  Check Main Render Comps
+                            if (hd > 0 || sd > 0 || uw > 0 || edit > 0) 
+                                      {
+                                          var R = "true";
+                                          theProject.item(i).label = 9;
+                                      }
+
+                          }
+                      
+                  //~ ------------------------------------  Check Folders
+
+                           for(var i = 1; i <= numItems; i++)
+                              {
+                                  str = theProject.item(i).name;
+                                  if(str == " RENDER THESE"){
+                                       theProject.item(i).label = 9;
+                                  } else {
+
+                                      if(str == "EDIT TEXT HERE"){
+                                       theProject.item(i).label = 9;
+                                      }                     
+                                      
+                                      }
+                              }
+                        app.endUndoGroup();
+
+                        app.beginUndoGroup("Move Solids Folder");
+
+                        var solidsFolder = null;                         // Assume no Solids folder found
+
+                        // Check the root folder for a "Solids" folder
+                        var projItems = app.project.rootFolder.items;    // Get the items in top level (root folder)
+                        var folderItem;
+
+                        for (var i = 1; i <= projItems.length; i++)      // Iterate over the top level's items
+                            {
+                            folderItem = projItems[i];                   // Look for a folder named "Solids"
+                            if ((folderItem instanceof FolderItem) && (folderItem.name === "NO EDITING"))
+                            {
+                            noEditingFolder = folderItem;
+                            noEditingFolder.selected = true;
+
+                            }
+                            if ((folderItem instanceof FolderItem) && (folderItem.name === "Solids"))
+                                {
+                                solidsFolder = folderItem;
+                                solidsFolder.parentFolder = noEditingFolder;
+                            break;
+                                }
+                            }
+                        app.endUndoGroup();
+                    }
+              
+                 myPanel.grp.myGroup.myPanel.compButton.onClick = function(){
+                        app.beginUndoGroup("Layer Labeler");
+                        var theProject = app.project;
+                        var theItems = app.project.items;
+                        var numItems = app.project.numItems;
+						var theComps = [];
+						
+						for(var y = 1; y <= numItems; y++){
+							if ( (theProject.item(y) instanceof CompItem) ) {
+
+							theComps.push(theProject.item(y));
+						} else {}
+						}
+						
+						//alert(theComps.join("\n"));
+						
+                        var str = " ";
+                        var R = "false";
+                        var compCounter = 0;
+                        var compCounterIndex = 1;
+
+                        //~ Build the comp array
+
+                        var mainComps = [];
+                        var mainCompIndex = [];
+                        var mainCompsList = [];
+
+						
+						numItems = theComps.length;
+
+                        for(var i = 0; i <= numItems-1; i++)
+                        {
+
+                            var theItem = theComps[i];
+                            
+                            var str = theItem.name;
+                            var hd = str.search("_HD");
+                            var sd = str.search("_SD");
+                            var uw = str.search("_UW"); 
+                            var edit = str.search("HERE"); 
+                            var solids = str.search("Solids");
+                            
+                            if (hd > 0) {
+                            mainComps.push(theItem);
+                            }
+                            
+                            if (sd > 0) {
+                            mainComps.push(theItem);
+                            }
+
+                            if (uw > 0) {
+                            mainComps.push(theItem);
+                            }
+
+                            if (edit > 0) {
+                            mainComps.push(theItem);   
+                            }
+
+                        }
+                         
+                        //~ Label the layers
+
+                        for(var j = 0; j <= (mainComps.length - 1); j++){
+                              	//alert (myLayers = mainComps[j].name);
+                                var myLayers = mainComps[j].layers.length;
+                                var theTime = mainComps[j].time;
+                              
+                              for(l = 1; l <= myLayers; l++){
+                                                   
+                                        var currentLayer = mainComps[j].layer(l);
+                                        currentLayer.label = 1;
+                                                                                
+                                        var title = currentLayer.name.search("TITLE");
+                                        var hdLayer = currentLayer.name.search("_HD");
+                                        var openToEdit = currentLayer.name.search("EDIT TEXT");
+                                        
+                                        if(title >= 0){
+                                                currentLayer.label = 9;
+                                                var myMarker = new MarkerValue("Edit " + currentLayer.name + " here"); 
+                                                currentLayer.property("Marker").setValueAtTime(theTime, myMarker);
+                                            }
+                                        
+                                        if(openToEdit >= 0){
+                                                currentLayer.label = 9;
+                                                var myMarker = new MarkerValue("Open to edit text"); 
+                                                currentLayer.property("Marker").setValueAtTime(theTime, myMarker);
+                                            }
+
+                                        if(hdLayer >= 0){
+                                                currentLayer.label = 9;
+                                                var myMarker = new MarkerValue("Open to edit text"); 
+                                                currentLayer.property("Marker").setValueAtTime(theTime, myMarker);
+                                                }
+                                  }
+                            }
+
+                        app.endUndoGroup();
+                    }
+
+                    myPanel.grp.myGroup.myPanel.renderQueueButton.onClick = function(){
+                        app.beginUndoGroup("Render Queue Prep");
+                        var theProject = app.project;
+                        var renderPath = theProject.file.path + "/Renders/";
+                        var theItems = app.project.items;
+                        var numRQItems = theProject.renderQueue.numItems;
+                        var str = " ";
+                        var RQList = [];
+      
+                        // If the Render Queue is empty, alert the user
+                        if(numRQItems == 0) {
+                            alert("Put some items in the Render Queue");
+                        } else {
+      
+                          // Add the ProRes SD Output Module and rename the SD Output
+                          for(r = 1; r <= numRQItems; r++)
+                          {
+                          var RQItem = theProject.renderQueue.item(r);
+
+                          if(RQItem.outputModules.length >= 2){
+                          for(var j = 0; j <= RQItem.outputModules.length; j++)
+                            {
+                                RQItem.outputModule(2).remove();
+                            }
+                           
+                            } else {}
+
+                          var myName = RQItem.comp.name;
+      
+                          if(RQItem.outputModules.length <= 1)
+                          {
+                              if(myName.search("_HD") >= 1)
+                                  {
+                                  RQItem.outputModules.add();
+                                  var outputModuleHD = 
+                                  RQItem.outputModule(1).file = new File(renderPath + myName);
+                                  var outputModuleSD = RQItem.outputModule(2).applyTemplate("ProRes SD");
+                                  var newName = myName.replace("_HD", "") + "_SD";
+                                  var outputModuleSD = RQItem.outputModule(2).file = new File(renderPath + newName);
+                                  }
+         
+                          } else {}
+
+                      }
+                  }
+                       
+                              app.endUndoGroup();
+                }
+
+                myPanel.grp.myGroup.myPanel.foldersButton.onClick = function(){
+                    app.beginUndoGroup("Add Folders");
+
+                    var theProject = app.project;
+                    var projItems = theProject.rootFolder.items;
+                    var theFolders = [" RENDER THESE", "NO EDITING", "Precomps", "Assets"];
+
+                    theProject.items.addFolder(theFolders[0]).label = 9;
+                        var noEditing = theProject.items.addFolder(theFolders[1]);
+                        var precompsFolder = theProject.items.addFolder(theFolders[2]).parentFolder = noEditing;
+                        var assetsFolder = theProject.items.addFolder(theFolders[3]).parentFolder = noEditing;
+                        noEditing.label = 1;
+                        noEditing.activated = true;
+
+                    app.endUndoGroup();
+                }
+
+                // Setup panel sizing and make panel resizable
+                myPanel.layout.layout(true);
+//~                 myPanel.grp.minimumSize = myPanel.grp.size;
+                myPanel.size.height = 100;
+//~                myPanel.layout.resize();
+                myPanel.onResizing = myPanel.onResize = function () {this.layout.resize();}
+
+                return myPanel;
+      }
+
+      // Build script panel
+      var myScriptPal = myScript_buildUI(thisObj);
+
+      if ((myScriptPal != null) && (myScriptPal instanceof Window)) {
+          myScriptPal.center();
+          myScriptPal.show();
+       }
+   }
+
+   // Execute script
+   myScript(this);
+}
