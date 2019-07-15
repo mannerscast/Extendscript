@@ -1,0 +1,399 @@
+/*global app, Panel, Window, TextLayer, ParagraphJustification */
+/*global alert, clearOutput, writeLn */
+
+{
+	function CountdownCreator(thisObj) {
+
+		var scriptInfo = {
+			name: "Countdown Creator",
+			version: "2.1d1",
+			modified: "2017-08-14",
+			author: "Luke Raymond",
+		};
+
+		function offsetKeyframeValues(prop, offset) {
+			var n = prop.numKeys;
+			var i;
+
+			if (n === 0) {
+				prop.setValue(prop.value + offset);
+				return;
+			}
+
+			for (i = 0; i < n; i += 1) {
+				prop.setValueAtKey(i + 1, prop.keyValue(i + 1) + offset);
+			}
+		}
+
+
+		function offsetKeyframeValuesWithClamp(prop, offset, vMin, vMax) {
+			var n = prop.numKeys;
+			var i, v, t;
+
+			if (n === 0) {
+				v = prop.value + offset;
+
+				if (v < vMin) {
+					v = vMin;
+				} else if (v > vMax) {
+					v = vMax;
+				}
+				prop.setValue(v);
+				return;
+			}
+			
+			if (n === 1) {
+				v = prop.valueAtKey(1) + offset;
+
+				if (v < vMin) {
+					v = vMin;
+				} else if (v > vMax) {
+					v = vMax;
+				}
+				
+				prop.setValueAtKey(1, v);
+				return;
+			}
+
+			// Save off keyframe times and values
+			t = [];
+			v = [];
+	
+			for (i = 0; i < n; i += 1) {
+				t.push(prop.keyTime(i + 1));
+				v.push(prop.keyValue(i + 1));
+			}
+
+			// Remove all keyframes
+			for (i = n; i > 0; i -= 1) {
+				prop.removeKey(i);
+			}
+
+			// Add offsetted keyframes, clamping values if necessary
+			var t0, t1, v0, v1;
+			var slopeInv, tIntercept;
+			for (i = 1; i < t.length; i += 1) {
+				t0 = t[i - 1];
+				t1 = t[i];
+
+				v0 = v[i - 1] + offset;
+				v1 = v[i] + offset;
+
+				if (v0 < vMin || v0 > vMax || v1 < vMin || v1 > vMax) {
+					// Percent offset has a -100 to 100 limit
+
+					if (v[i] === v[i - 1]) {
+						// No slope
+						if (v0 > vMax) {
+							v0 = vMax;
+							v1 = vMax;
+						} else if (v0 < vMin) {
+							v0 = vMin;
+							v1 = vMin;
+						}
+					} else {
+						slopeInv = (t[i] - t[i - 1]) / (v[i] - v[i - 1]);
+						tIntercept = (vMax - (v[i - 1] + offset)) * slopeInv + t[i - 1];
+
+						if (tIntercept < t0) {
+							if (v1 > v0) {
+								v0 = vMax;
+								v1 = vMax;
+							}
+						} else if (tIntercept >= t0 && tIntercept <= t1) {
+							if (v1 > v0) {
+								t1 = tIntercept;
+								v1 = vMax;
+							} else {
+								t0 = tIntercept;
+								v0 = vMax;
+							}
+						} else if (tIntercept > t1) {
+							if (v0 > v1) {
+								v0 = vMax;
+								v1 = vMax;
+							}
+						}
+
+						tIntercept = (vMin - (v[i - 1] + offset)) * slopeInv + t[i - 1];
+
+						if (tIntercept < t0) {
+							if (v1 < v0) {
+								v0 = vMin;
+								v1 = vMin;
+							}
+						} else if (tIntercept >= t0 && tIntercept <= t1) {
+							if (v1 < v0) {
+								t1 = tIntercept;
+								v1 = vMin;
+							} else {
+								t0 = tIntercept;
+								v0 = vMin;
+							}
+						} else if (tIntercept > t1) {
+							if (v0 < v1) {
+								v0 = vMin;
+								v1 = vMin;
+							}
+						}
+					}
+				}
+
+				prop.setValueAtTime(t0, v0);
+				prop.setValueAtTime(t1, v1);
+			}
+		}
+
+
+		function adjustTextAnimators(layer, index, numDigits) {
+
+			var offsetPercent = 100 * (0.5 - (index + 0.5) / numDigits);
+			var offsetIndex = -index;
+
+			// Go through all the text animators on the selected layer
+			var animators = layer.property("ADBE Text Properties").property("ADBE Text Animators");
+			var i, j, selectors, selector, units, rangeOffset;
+			for (i = 0; i < animators.numProperties; i += 1) {
+				selectors = animators.property(i + 1).property("ADBE Text Selectors");
+			
+				for (j = 0; j < selectors.numProperties; j += 1) {
+					selector = selectors.property(j + 1);	// ADBE Text Selector
+			
+					// 1 - percentage, 2 - index
+					units = selector.property("ADBE Text Range Advanced").property("ADBE Text Range Units").value;
+
+					if (selector.property("ADBE Text Range Advanced").property("ADBE Text Range Shape").value === 1) {
+						var smoothness = selector.property("ADBE Text Range Advanced").property("ADBE Text Selector Smoothness");
+						smoothness.setValue(smoothness.value / numDigits);
+					}
+
+					rangeOffset = selector.property(units === 2 ? "ADBE Text Index Offset" : "ADBE Text Percent Offset");
+
+					if (units === 2) {
+						// Index based
+						offsetKeyframeValues(rangeOffset, offsetIndex);
+					} else {
+						// Percent based
+						offsetKeyframeValuesWithClamp(rangeOffset, offsetPercent, -100, 100);
+					}
+				}
+			}
+		}
+
+
+		function applyExpressions(layer) {
+
+			var expressions = {
+				position: [
+					"try {",
+					"	thisComp.layer(1).position",
+					"}",
+					"catch (err) {",
+					"	value",
+					"}"
+				],
+				anchorPoint: [
+					"var separator = \":\";",
+					"var separatorWidth = 0.75;",
+					"try {",
+					"	tracking = thisComp.layer(1).effect(4)(\"Slider\").value;",
+					"	kernAdjust = effect(5)(\"Slider\").value;",
+					"",
+					"	var x = -kernAdjust;",
+					"	var y = value[1];",
+					"",
+					"	if (index > 1) {",
+					"		var prevLayer = thisComp.layer(index - 1);",
+					"		x += prevLayer.anchorPoint[0] - tracking;",
+					"",
+					"		if (text.sourceText.value === separator) {",
+					"			x += tracking * (1 - separatorWidth);",
+					"		}",
+					"",
+					"		if (prevLayer.text.sourceText.value === separator) {",
+					"			x += tracking * (1 - separatorWidth);",
+					"		}",
+					"	}",
+					"	[x, y];",
+					"} catch (err){",
+					"	value",
+					"}"
+				],
+				countLength: [
+					"try {",
+					"	thisComp.layer(1).effect(1)(\"Slider\").value",
+					"} catch (err) {",
+					"	value",
+					"}"
+				],
+				holdTime: [
+					"try {",
+					"	thisComp.layer(1).effect(2)(\"Slider\").value",
+					"} catch (err) {",
+					"	value",
+					"}"
+				],
+				framesOnOff: [
+					"try {",
+					"	thisComp.layer(1).effect(3)(\"Checkbox\").value",
+					"} catch (err) {",
+					"	value",
+					"}"
+				],
+				sourceText: [
+					"try {",
+					"	countLength = effect(1)(\"Slider\").value * 60;",
+					"	holdTime = effect(2)(\"Slider\").value;",
+					"	var t = clamp(countLength - time + holdTime, 0, countLength);",
+					"	var str = timeToTimecode(t);",
+					"",
+					"	var start = 4;",
+					"	if (countLength >= 600) { start -= 1; }",
+					"	if (countLength >= 3600) { start -= 2; }",
+					"",
+					"	var stop = str.length;",
+					"	if (effect(3)(\"Checkbox\").value !== 1) { stop = -3; }",
+					"",
+					"	str = str.slice(start, stop).substr(index - 1, 1);",
+					"	if (index === 1 && start === 3 && str === \"0\") {",
+					"		str = \"\";",
+					"	}",
+					"	str;",
+					"} catch (err) {",
+					"	\"Dummy Text\"",
+					"}",
+				]
+			};
+
+			function addControl(layer, type, name, value, expressionArray) {
+				var sliderCtrl = layer.Effects.addProperty(type);
+				sliderCtrl.name = name;
+
+				var slider = sliderCtrl.property(1);
+
+				if (value !== undefined) {
+					slider.setValue(value);
+				}
+
+				if (expressionArray) {
+					slider.expression = expressionArray.join("\n");
+				}
+			}
+
+			var tracking = 0.65 * layer.property("Source Text").value.fontSize;
+
+			layer.position.expression = expressions.position.join("\n");
+			addControl(layer, "Slider Control", "Count Length (mins)", 5, expressions.countLength);
+			addControl(layer, "Slider Control", "Hold Time", 2, expressions.holdTime);
+			addControl(layer, "Checkbox Control", "Frames-On/Off", true, expressions.framesOnOff);
+			addControl(layer, "Slider Control", "Tracking", tracking);
+			addControl(layer, "Slider Control", "Kerning Adjust");
+			layer.anchorPoint.expression = expressions.anchorPoint.join("\n");
+			layer.sourceText.expression = expressions.sourceText.join("\n");
+		}
+
+
+		function CDCreator(layer){
+
+			function setText(layer, text) {
+				var sourceText = layer.property("Source Text"); 
+				var textDocument = sourceText.value;
+				textDocument.text = text;
+				sourceText.setValue(textDocument);
+			}
+
+			setText(layer, "Timer 1");
+
+			// Make sure text is center aligned
+			var textProp = layer.property("Source Text"); 
+			var textDocument = textProp.value;				
+			textDocument.justification = ParagraphJustification.CENTER_JUSTIFY; 
+			textProp.setValue(textDocument);
+
+			// Apply the expressions to the first layer
+			var layers = [layer];
+			applyExpressions(layer);
+
+			// Now duplicate this layer multiple times			
+			var i;
+			for (i = 2; i <= 4; i++){  
+				layer = layer.duplicate();
+				layers.unshift(layer);
+				setText(layer, "Timer " + i);
+			}
+			
+			for (i = 0; i < layers.length; i += 1) {
+				adjustTextAnimators(layers[i], i, layers.length);
+			}
+		}
+
+
+		function createPanel(thisObj) {
+			var myPanel = thisObj;
+
+			var panelLayout = [
+				"group {",
+					"orientation: 'column',",
+					"alignChildren: ['fill', 'top'],",
+					"spacing: 10,",
+					"usage: StaticText {",
+						"properties: { multiline: true },", 
+						"text: 'Create a countdown sequence.\\nOptional: Select a text layer first to use as a template'",
+					"},",
+					"createBtn: Button { text: 'Create Countdown', active: true }",
+				"}"
+			];
+			
+			if (!(myPanel instanceof Panel)) {
+				myPanel = new Window("palette", scriptInfo.name);
+				myPanel.margins = 10;
+				myPanel.show();
+			}
+
+			var c = myPanel.add(panelLayout.join(""));
+			c.createBtn.onClick = function() {
+				try {
+					var timerComp = app.project.activeItem;
+					var selectedLayers = timerComp.selectedLayers;
+	
+					if (selectedLayers.length > 1 ||
+						(selectedLayers.length === 1 && !(selectedLayers[0] instanceof TextLayer))
+					) {
+						alert("Please select a single text layer.");
+						return;
+					}
+	
+					app.beginUndoGroup(scriptInfo.name);
+		
+					var layer;
+					if (selectedLayers.length === 1) {
+						layer = selectedLayers[0];
+						var newLayer = layer.duplicate();
+						layer.enabled = false;
+						CDCreator(newLayer);
+					} else {
+						layer = timerComp.layers.addText("Timer 1");
+						CDCreator(layer);
+					}
+		
+					app.endUndoGroup();
+					
+					writeLn("Countdown created");
+				} catch (err) {
+					alert(err);
+				}
+			};
+
+			myPanel.layout.layout(1);
+
+			return myPanel;
+		}
+		
+		createPanel(thisObj);
+		clearOutput();
+		writeLn(scriptInfo.name + " v" + scriptInfo.version);
+		writeLn("Panel created");
+	}
+
+	CountdownCreator(this);
+}
