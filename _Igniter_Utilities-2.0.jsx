@@ -5,284 +5,234 @@
 // >>> Try to fix this in later releases.
 
 {
-   function myScript(thisObj) {
-      function myScript_buildUI(thisObj) {
-                var myPanel = (thisObj instanceof Panel) ? thisObj : new Window("palette", "Panel Name", [0, 0, 300, 50]);
+    function igniterUtilities(thisObj) {
+        // --- CONFIGURATION ---
+        var CONFIG = {
+            PANEL_TITLE: "IGNITER MEDIA UTILITIES 2.0",
+            LABELS: {
+                DEFAULT: 1, // None
+                RED: 9 // Red
+            },
+            MARKER_TEXT: {
+                EDIT_TITLE: "Edit this title here",
+                OPEN_TO_EDIT: "Open to edit text"
+            },
+            MATCH_PATTERNS: {
+                // Regex to find comps that should be labeled red
+                MAIN_COMP: /_HD|_SD|_UW|HERE/,
+                // Regex to find layers that should be labeled red
+                MAIN_LAYER: /TITLE|EDIT TEXT|_HD/
+            },
+            FOLDER_NAMES: {
+                RENDER: " RENDER THESE",
+                NO_EDIT: "NO EDITING",
+                PRECOMPS: "Precomps",
+                ASSETS: "Assets",
+                SOLIDS: "Solids"
+            },
+            RENDER: {
+                PRORES_SD_TEMPLATE: "ProRes SD",
+                RENDER_FOLDER: "/Renders/"
+            }
+        };
 
-                res = "group{orientation:'column', alignment:['fill', 'fill'], alignChildren:['fill', 'fill'],\
-                        myGroup: Group{orientation:'column', alignment:['fill', 'fill'], alignChildren:['fill', 'fill'],\
-                                myPanel: Panel{text:'IGNITER MEDIA UTILITIES 2.0', orientation:'row', alignChildren:['left', 'fill'],\
-                                    projectButton: Button{preferredSize: [90, 30], text:'Prep Project'},\
-                                    compButton: Button{preferredSize: [90, 30], text:'Prep Comps'},\
-                                    renderQueueButton: Button{preferredSize: [90, 30], text:'Render Prep'},\
-                                    foldersButton: Button{preferredSize: [60, 30], text:'+Folders'},\
-                                },\
-                        },\
-                }"
+        // --- LOGIC FUNCTIONS ---
 
-                // Adds resource string to panel
-                myPanel.grp = myPanel.add(res);
+        function prepProject() {
+            app.beginUndoGroup("Prep Project");
+            var project = app.project;
+            var allItems = project.items;
+            var noEditingFolder = null;
+            var solidsFolder = null;
 
-                 
-                // Assign function to UI elements
-                myPanel.grp.myGroup.myPanel.projectButton.onClick = function(){
-                  app.beginUndoGroup("Comp Labels");
-                  var theProject = app.project;
-                  var theItems = app.project.items;
-                  var numItems = app.project.numItems;
-                  var str = " ";
-                  var R = " ";
-                  
+            for (var i = 1; i <= allItems.length; i++) {
+                var currentItem = allItems[i];
+                var itemName = currentItem.name;
 
-                  var isFolder = 0;
+                // Default label for all items
+                currentItem.label = CONFIG.LABELS.DEFAULT;
 
-                          for(var i = 1; i <= numItems; i++)
-                      {
-                            theProject.item(i).label = 1;
-                            str = theProject.item(i).name;
-                            var hd = str.search("_HD");
-                            var sd = str.search("_SD");
-                            var uw = str.search("_UW");
-							var edit = str.search("HERE");
-                         
-                            
-                  //~ ------------------------------------  Check Main Render Comps
-                            if (hd > 0 || sd > 0 || uw > 0 || edit > 0) 
-                                      {
-                                          var R = "true";
-                                          theProject.item(i).label = 9;
-                                      }
+                // Label main comps and special folders
+                if (itemName.search(CONFIG.MATCH_PATTERNS.MAIN_COMP) > -1 || itemName === CONFIG.FOLDER_NAMES.RENDER || itemName === "EDIT TEXT HERE") {
+                    currentItem.label = CONFIG.LABELS.RED;
+                }
 
-                          }
-                      
-                  //~ ------------------------------------  Check Folders
-
-                           for(var i = 1; i <= numItems; i++)
-                              {
-                                  str = theProject.item(i).name;
-                                  if(str == " RENDER THESE"){
-                                       theProject.item(i).label = 9;
-                                  } else {
-
-                                      if(str == "EDIT TEXT HERE"){
-                                       theProject.item(i).label = 9;
-                                      }                     
-                                      
-                                      }
-                              }
-                        app.endUndoGroup();
-
-                        app.beginUndoGroup("Move Solids Folder");
-
-                        var solidsFolder = null;                         // Assume no Solids folder found
-
-                        // Check the root folder for a "Solids" folder
-                        var projItems = app.project.rootFolder.items;    // Get the items in top level (root folder)
-                        var folderItem;
-
-                        for (var i = 1; i <= projItems.length; i++)      // Iterate over the top level's items
-                            {
-                            folderItem = projItems[i];                   // Look for a folder named "Solids"
-                            if ((folderItem instanceof FolderItem) && (folderItem.name === "NO EDITING"))
-                            {
-                            noEditingFolder = folderItem;
-                            noEditingFolder.selected = true;
-
-                            }
-                            if ((folderItem instanceof FolderItem) && (folderItem.name === "Solids"))
-                                {
-                                solidsFolder = folderItem;
-                                solidsFolder.parentFolder = noEditingFolder;
-                            break;
-                                }
-                            }
-                        app.endUndoGroup();
+                // Find special folders
+                if (currentItem instanceof FolderItem) {
+                    if (itemName === CONFIG.FOLDER_NAMES.NO_EDIT) {
+                        noEditingFolder = currentItem;
+                    } else if (itemName === CONFIG.FOLDER_NAMES.SOLIDS) {
+                        solidsFolder = currentItem;
                     }
-              
-                 myPanel.grp.myGroup.myPanel.compButton.onClick = function(){
-                        app.beginUndoGroup("Layer Labeler");
-                        var theProject = app.project;
-                        var theItems = app.project.items;
-                        var numItems = app.project.numItems;
-						var theComps = [];
-						
-						for(var y = 1; y <= numItems; y++){
-							if ( (theProject.item(y) instanceof CompItem) ) {
+                }
+            }
 
-							theComps.push(theProject.item(y));
-						} else {}
-						}
-						
-						//alert(theComps.join("\n"));
-						
-                        var str = " ";
-                        var R = "false";
-                        var compCounter = 0;
-                        var compCounterIndex = 1;
+            // Move Solids folder into NO EDITING folder if both exist
+            if (solidsFolder && noEditingFolder) {
+                solidsFolder.parentFolder = noEditingFolder;
+            }
+            app.endUndoGroup();
+        }
 
-                        //~ Build the comp array
+        function prepComps() {
+            app.beginUndoGroup("Prep Comps (Layer Labeler)");
+            var project = app.project;
+            var allItems = project.items;
 
-                        var mainComps = [];
-                        var mainCompIndex = [];
-                        var mainCompsList = [];
+            for (var i = 1; i <= allItems.length; i++) {
+                var currentItem = allItems[i];
 
-						
-						numItems = theComps.length;
+                // Process only main comps
+                if (currentItem instanceof CompItem && currentItem.name.search(CONFIG.MATCH_PATTERNS.MAIN_COMP) > -1) {
+                    var compTime = currentItem.time;
+                    for (var l = 1; l <= currentItem.numLayers; l++) {
+                        var currentLayer = currentItem.layer(l);
+                        currentLayer.label = CONFIG.LABELS.DEFAULT;
 
-                        for(var i = 0; i <= numItems-1; i++)
-                        {
-
-                            var theItem = theComps[i];
-                            
-                            var str = theItem.name;
-                            var hd = str.search("_HD");
-                            var sd = str.search("_SD");
-                            var uw = str.search("_UW"); 
-                            var edit = str.search("HERE"); 
-                            var solids = str.search("Solids");
-                            
-                            if (hd > 0) {
-                            mainComps.push(theItem);
-                            }
-                            
-                            if (sd > 0) {
-                            mainComps.push(theItem);
-                            }
-
-                            if (uw > 0) {
-                            mainComps.push(theItem);
-                            }
-
-                            if (edit > 0) {
-                            mainComps.push(theItem);   
-                            }
-
+                        if (currentLayer.name.search(CONFIG.MATCH_PATTERNS.MAIN_LAYER) > -1) {
+                            currentLayer.label = CONFIG.LABELS.RED;
+                            var markerText = (currentLayer.name.indexOf("TITLE") > -1) ? CONFIG.MARKER_TEXT.EDIT_TITLE : CONFIG.MARKER_TEXT.OPEN_TO_EDIT;
+                            var newMarker = new MarkerValue(markerText);
+                            currentLayer.property("Marker").setValueAtTime(compTime, newMarker);
                         }
-                         
-                        //~ Label the layers
-
-                        for(var j = 0; j <= (mainComps.length - 1); j++){
-                              	//alert (myLayers = mainComps[j].name);
-                                var myLayers = mainComps[j].layers.length;
-                                var theTime = mainComps[j].time;
-                              
-                              for(l = 1; l <= myLayers; l++){
-                                                   
-                                        var currentLayer = mainComps[j].layer(l);
-                                        currentLayer.label = 1;
-                                                                                
-                                        var title = currentLayer.name.search("TITLE");
-                                        var hdLayer = currentLayer.name.search("_HD");
-                                        var openToEdit = currentLayer.name.search("EDIT TEXT");
-                                        
-                                        if(title >= 0){
-                                                currentLayer.label = 9;
-                                                var myMarker = new MarkerValue("Edit " + currentLayer.name + " here"); 
-                                                currentLayer.property("Marker").setValueAtTime(theTime, myMarker);
-                                            }
-                                        
-                                        if(openToEdit >= 0){
-                                                currentLayer.label = 9;
-                                                var myMarker = new MarkerValue("Open to edit text"); 
-                                                currentLayer.property("Marker").setValueAtTime(theTime, myMarker);
-                                            }
-
-                                        if(hdLayer >= 0){
-                                                currentLayer.label = 9;
-                                                var myMarker = new MarkerValue("Open to edit text"); 
-                                                currentLayer.property("Marker").setValueAtTime(theTime, myMarker);
-                                                }
-                                  }
-                            }
-
-                        app.endUndoGroup();
                     }
+                }
+            }
+            app.endUndoGroup();
+        }
 
-                    myPanel.grp.myGroup.myPanel.renderQueueButton.onClick = function(){
-                        app.beginUndoGroup("Render Queue Prep");
-                        var theProject = app.project;
-                        var renderPath = theProject.file.path + "/Renders/";
-                        var theItems = app.project.items;
-                        var numRQItems = theProject.renderQueue.numItems;
-                        var str = " ";
-                        var RQList = [];
-      
-                        // If the Render Queue is empty, alert the user
-                        if(numRQItems == 0) {
-                            alert("Put some items in the Render Queue");
-                        } else {
-      
-                          // Add the ProRes SD Output Module and rename the SD Output
-                          for(r = 1; r <= numRQItems; r++)
-                          {
-                          var RQItem = theProject.renderQueue.item(r);
+        function prepRenderQueue() {
+            app.beginUndoGroup("Prep Render Queue");
+            var project = app.project;
+            var renderQueue = project.renderQueue;
 
-                          if(RQItem.outputModules.length >= 2){
-                          for(var j = 0; j <= RQItem.outputModules.length; j++)
-                            {
-                                RQItem.outputModule(2).remove();
-                            }
-                           
-                            } else {}
+            if (renderQueue.numItems === 0) {
+                alert("The Render Queue is empty. Please add items to render.");
+                return;
+            }
 
-                          var myName = RQItem.comp.name;
-      
-                          if(RQItem.outputModules.length <= 1)
-                          {
-                              if(myName.search("_HD") >= 1)
-                                  {
-                                  RQItem.outputModules.add();
-                                  var outputModuleHD = 
-                                  RQItem.outputModule(1).file = new File(renderPath + myName);
-                                  var outputModuleSD = RQItem.outputModule(2).applyTemplate("ProRes SD");
-                                  var newName = myName.replace("_HD", "") + "_SD";
-                                  var outputModuleSD = RQItem.outputModule(2).file = new File(renderPath + newName);
-                                  }
-         
-                          } else {}
+            var renderPath = project.file.path + CONFIG.RENDER.RENDER_FOLDER;
 
-                      }
-                  }
-                       
-                              app.endUndoGroup();
+            for (var i = 1; i <= renderQueue.numItems; i++) {
+                var rqItem = renderQueue.item(i);
+                var compName = rqItem.comp.name;
+
+                // Clean up extra output modules if they exist
+                while (rqItem.numOutputModules > 1) {
+                    rqItem.outputModule(2).remove();
                 }
 
-                myPanel.grp.myGroup.myPanel.foldersButton.onClick = function(){
-                    app.beginUndoGroup("Add Folders");
+                // Process only HD comps to create an SD version
+                if (rqItem.numOutputModules === 1 && compName.indexOf("_HD") > -1) {
+                    // Set path for HD output
+                    rqItem.outputModule(1).file = new File(renderPath + compName);
 
-                    var theProject = app.project;
-                    var projItems = theProject.rootFolder.items;
-                    var theFolders = [" RENDER THESE", "NO EDITING", "Precomps", "Assets"];
-
-                    theProject.items.addFolder(theFolders[0]).label = 9;
-                        var noEditing = theProject.items.addFolder(theFolders[1]);
-                        var precompsFolder = theProject.items.addFolder(theFolders[2]).parentFolder = noEditing;
-                        var assetsFolder = theProject.items.addFolder(theFolders[3]).parentFolder = noEditing;
-                        noEditing.label = 1;
-                        noEditing.activated = true;
-
-                    app.endUndoGroup();
+                    // Add and configure SD output
+                    var sdModule = rqItem.outputModules.add();
+                    sdModule.applyTemplate(CONFIG.RENDER.PRORES_SD_TEMPLATE);
+                    var sdName = compName.replace("_HD", "_SD");
+                    sdModule.file = new File(renderPath + sdName);
                 }
+            }
+            app.endUndoGroup();
+        }
 
-                // Setup panel sizing and make panel resizable
-                myPanel.layout.layout(true);
-//~                 myPanel.grp.minimumSize = myPanel.grp.size;
-                myPanel.size.height = 100;
-//~                myPanel.layout.resize();
-                myPanel.onResizing = myPanel.onResize = function () {this.layout.resize();}
+        function createFolders() {
+            app.beginUndoGroup("Add Project Folders");
+            var project = app.project;
 
-                return myPanel;
-      }
+            // Create top-level render folder
+            project.items.addFolder(CONFIG.FOLDER_NAMES.RENDER).label = CONFIG.LABELS.RED;
 
-      // Build script panel
-      var myScriptPal = myScript_buildUI(thisObj);
+            // Create "NO EDITING" folder and its children
+            var noEditingFolder = project.items.addFolder(CONFIG.FOLDER_NAMES.NO_EDIT);
+            project.items.addFolder(CONFIG.FOLDER_NAMES.PRECOMPS).parentFolder = noEditingFolder;
+            project.items.addFolder(CONFIG.FOLDER_NAMES.ASSETS).parentFolder = noEditingFolder;
+            noEditingFolder.label = CONFIG.LABELS.DEFAULT;
 
-      if ((myScriptPal != null) && (myScriptPal instanceof Window)) {
-          myScriptPal.center();
-          myScriptPal.show();
-       }
-   }
+            app.endUndoGroup();
+        }
 
-   // Execute script
-   myScript(this);
+
+        // --- UI BUILDING ---
+
+        function buildUI(thisObj) {
+            var myPanel = (thisObj instanceof Panel) ? thisObj : new Window("palette", CONFIG.PANEL_TITLE, undefined, {
+                resizeable: true
+            });
+            myPanel.orientation = 'column';
+            myPanel.alignChildren = ['fill', 'top'];
+
+            var res = "Panel { \
+                text: '" + CONFIG.PANEL_TITLE + "', \
+                orientation:'row', \
+                alignChildren:['left', 'fill'], \
+                projectButton: Button { preferredSize: [90, 30], text:'Prep Project' }, \
+                compButton: Button { preferredSize: [90, 30], text:'Prep Comps' }, \
+                renderQueueButton: Button { preferredSize: [90, 30], text:'Render Prep' }, \
+                foldersButton: Button { preferredSize: [60, 30], text:'+Folders' } \
+            }";
+
+            var mainGroup = myPanel.add(res);
+
+            // --- UI ELEMENT ACTIONS ---
+
+            mainGroup.projectButton.onClick = function() {
+                if (app.project) {
+                    prepProject();
+                    alert("Project Prep Complete.");
+                } else {
+                    alert("Please open a project first.");
+                }
+            };
+
+            mainGroup.compButton.onClick = function() {
+                if (app.project) {
+                    prepComps();
+                    alert("Comp Prep Complete.");
+                } else {
+                    alert("Please open a project first.");
+                }
+            };
+
+            mainGroup.renderQueueButton.onClick = function() {
+                if (app.project) {
+                    prepRenderQueue();
+                    alert("Render Queue Prep Complete.");
+                } else {
+                    alert("Please open a project first.");
+                }
+            };
+
+            mainGroup.foldersButton.onClick = function() {
+                if (app.project) {
+                    createFolders();
+                    alert("Folders Created.");
+                } else {
+                    alert("Please open a project first.");
+                }
+            };
+
+            // --- PANEL LAYOUT & SIZING ---
+
+            myPanel.layout.layout(true);
+            myPanel.onResizing = myPanel.onResize = function() {
+                this.layout.resize();
+            };
+
+            return myPanel;
+        }
+
+        // --- SCRIPT EXECUTION ---
+
+        var scriptPanel = buildUI(thisObj);
+
+        if (scriptPanel instanceof Window) {
+            scriptPanel.center();
+            scriptPanel.show();
+        }
+    }
+
+    // Execute script
+    igniterUtilities(this);
 }
